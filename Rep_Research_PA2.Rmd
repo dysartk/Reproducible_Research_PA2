@@ -1,0 +1,22 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+#Impact of nvestigation of the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database
+Kevin Dysart  
+December 20th, 2015  
+
+##Call the appropriate packages.  
+For this assignment I will be utlizing the dplyr, xtable, knitr, mice, lattice and ggplot2 packages.
+```{r package call}
+library("dplyr")
+library("ggplot2")
+library("xtable")
+library("knitr")
+library("mice")
+library("lattice")
+```
+
+##Data Processing
