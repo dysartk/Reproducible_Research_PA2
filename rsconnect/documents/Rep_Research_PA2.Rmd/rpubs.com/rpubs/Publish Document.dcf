@@ -1,0 +1,7 @@
+name: Publish Document
+account: rpubs
+server: rpubs.com
+bundleId:
+        https://api.rpubs.com/api/v1/document/138266/326c649e4cd5436da2b9d6cb9c89a8a9
+url: http://rpubs.com/kcdysart/138266
+when: 1451250172.40817

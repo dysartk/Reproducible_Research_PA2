@@ -1,22 +1,158 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
+title: "Reproducible Research: Peer Assessment 2"
 output: 
   html_document:
     keep_md: true
 ---
-#Impact of nvestigation of the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database
+#Storm events, from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database, the **economic** and **human health impacts** from 1950.  
+
 Kevin Dysart  
-December 20th, 2015  
+December 27th, 2015  
 
 ##Call the appropriate packages.  
-For this assignment I will be utlizing the dplyr, xtable, knitr, mice, lattice and ggplot2 packages.
+For this assignment I will be utlizing the dplyr, knitr, grid, gridExtra and ggplot2 packages.
 ```{r package call}
 library("dplyr")
 library("ggplot2")
-library("xtable")
+library("grid")
 library("knitr")
-library("mice")
+library("gridExtra")
 library("lattice")
 ```
 
+##Synopsis
+Contained herein is an analysis of the financial and human health realated impact of storm events in the United States. The analysis utilizes the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+
 ##Data Processing
+After assigning the original dataset to an R object my usual first step is to simply look at the first 6 rows and call summary() and str() on the whole set to look for missing values amongst the variables.
+```{r Read data, cache=TRUE}
+StormData <- read.csv("~/Desktop/OneDrive/R Working Directory/Reproducible_Research/Programming_Assignment_2/repdata-data-StormData.csv")
+summary(StormData)
+head(StormData)
+str(StormData)
+SD_dim <- as.data.frame(dim(StormData))
+```
+
+It can be seen from the initial look at the data that the are `r SD_dim[1,1]` observations of `r SD_dim[2,1]` variables.  
+
+In order to better understand the data set I spent some time reading through the online documentation. From the questions that are asked of us for this assigment I am most interested in any variable that will help answer those questions regarding the financial and health related impact of any weather related event.
+
+My intial step was to subset the data for the variables of interest. I have decided to evaluate the health impact of weather related events by looking at fatalities and injuries and to evaluate the economic impact by looking at the damage to crops.  
+*Of note I have chosen to keep the whole data set here back to 1950.*  
+
+I have chosen:  
+Event Type = EVTYPE
+Fatalities = FATALITIES
+Injuries = INJURIES
+Property Damage Amount = PROPDMG
+Property Damage Exponent = PROPDMGEXP
+Crop Damage Amount = CROPDMG
+Prop Damage Exponent = CROPDMGEXP  
+
+```{r select variables}
+StormData_a <- tbl_df(StormData)
+StormData_b <- select(StormData_a, EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+```
+Two of the interesting problems to deal with in this data set are the problem of the exponent multiplier for the financial damage done related to any event and the event type having multiple names for a similar event.  
+For this data analysis I have chosen to leave the event type as is and not recode that variable at this point. I plan of sorting the resultant data from and selecting the first 10 rows during the analysis and plotting that data. More in depth analysis would likely combine similar events into a single event type but that would take much discussion and knowledge of the dataset I don't possess at this point and beyond the scope I feel of the current assignment.  
+The exponent porblem does have to be dealt with to create a sensible variable that is numeric for the exponent multiplier and then create a numeric total damage to both crop and property.  
+
+```{r unique exponents}
+unique(StormData_b$PROPDMGEXP)
+unique(StormData_b$CROPDMGEXP)
+```
+
+As can be seen the data set contains exponent values that are non-sensical or 0.
+I will attempt to deal with the exponent problem first. 
+The following code achieves the end of transforming all of the character factors into a numeric value to be multiplied at a later point by the numeric value in the appropriate damage columns.
+The missing values and the junk values with be re-coded as NA and then the data set will be omitted.  
+
+```{r re coding exponents}
+StormData_b$CROPDMGEXP <- as.character(StormData_b$CROPDMGEXP)
+StormData_b$PROPDMGEXP <- as.character(StormData_b$PROPDMGEXP)
+StormData_c <- mutate(StormData_b, CROPDMGEXP_b=ifelse(CROPDMGEXP %in% c("", "?"), "NA", 
+                                                       ifelse(CROPDMGEXP %in% c("M","m"),"6",
+                                                              ifelse(CROPDMGEXP %in% c("K","k"),"3",
+                                                                     ifelse(CROPDMGEXP=="0","0",
+                                                                            ifelse(CROPDMGEXP=="2","2","9"))))))
+StormData_c <- mutate(StormData_c, PROPDMGEXP_b=ifelse(PROPDMGEXP %in% c("", "?", "-", "+"), "NA", 
+                                                       ifelse(PROPDMGEXP %in% c("M","m","6"),"6",
+                                                              ifelse(PROPDMGEXP %in% c("K","k","3"),"3",
+                                                                     ifelse(PROPDMGEXP=="0","0",
+                                                                            ifelse(PROPDMGEXP %in% c("2", "h", "H"), "2",
+                                                                                   ifelse(PROPDMGEXP=="7", "7",
+                                                                                          ifelse(PROPDMGEXP=="8", "8", "9"))))))))
+StormData_c$CROPDMGEXP_b <- as.numeric(StormData_c$CROPDMGEXP_b)
+StormData_c$PROPDMGEXP_b <- as.numeric(StormData_c$PROPDMGEXP_b)
+```  
+
+I have created a new data set, StormData_c, above that has all of the exponents converted to a numeric calue and NA's have been introduced into the dataset where either an empty space or junk code was present in the exponent variables.  
+I am going to further subset the original data sets for each of the questions:  
+*StormData_health* for the injury and fatality questions and *StromData_fin* for the financial questions.  
+```{r subset}
+StormData_health <- select(StormData_c, EVTYPE, FATALITIES, INJURIES)
+StormData_fin <- select(StormData_c, EVTYPE, PROPDMG, CROPDMG, PROPDMGEXP_b, CROPDMGEXP_b)
+```  
+
+##Results  
+### Fatalities and Injuries
+Now that I have a dataset for the health impact of the storm events there needs to be a few further refinements to create a bar plot of the 10 events with the greatest impact on fatalities and injuries.  
+
+#### Fatalities
+```{r fatalities, fig.height=4, fig.width=10}
+StormData_health <- group_by(StormData_health, EVTYPE)
+StormData_health_b <- summarize(StormData_health, sum_fat = sum(FATALITIES), sum_inj = sum(INJURIES))
+StormData_health_c  <- arrange(StormData_health_b, desc(sum_fat))
+StormData_health_f <- StormData_health_c[1:10,]
+StormData_health_d  <- arrange(StormData_health_b, desc(sum_inj))
+StormData_health_i <- StormData_health_d[1:10,]
+a <- ggplot(StormData_health_f, aes(EVTYPE, sum_fat))
+b <- a + geom_bar(stat="identity", aes(fill = EVTYPE)) +
+xlab("Event Type") + ylab("Sum of Fatality") +
+ggtitle("Fatalities by Event Type")
+print(b)
+```
+
+####Injuries
+```{r injuries, fig.height=4, fig.width=10}
+c <- ggplot(StormData_health_i, aes(EVTYPE, sum_inj))
+d <- c + geom_bar(stat="identity", aes(fill = EVTYPE)) +
+xlab("Event Type") + ylab("Sum of Injuries") +
+ggtitle("Injuries by Event Type")
+print(d)
+```
+
+It is clear from both of the above plots that the event associated with the greatest number of both fatalities and injuries are **Tornados** followed by **Excessive Heat**.  
+
+###Financial Impact  
+The next part of the assignment was to examine the financial impact of the storm events. There are 2 separate measures here, property damage and crop damage. Below is presented the code and plots describing the relationship between events and amounts.  
+*Of note only complete cases will be considered in the analysis of financial impact.*
+```{r financial, fig.height=4, fig.width=10}
+StormData_fin_a <- na.omit(StormData_fin)
+StormData_fin_b <- mutate(StormData_fin_a, TOTPROP = PROPDMG*10^PROPDMGEXP_b, TOTCROP = CROPDMG*10^CROPDMGEXP_b)
+StormData_fin_c <- group_by(StormData_fin_b, EVTYPE)
+StormData_fin_d <- summarize(StormData_fin_c, sum_TOTPROP=sum(TOTPROP), sum_TOTCROP=sum(TOTCROP))
+StormData_fin_prop <- arrange(StormData_fin_d, desc(sum_TOTPROP))
+StormData_fin_prop_a <- StormData_fin_prop[1:10,]
+StormData_fin_crop <- arrange(StormData_fin_d, desc(sum_TOTCROP))
+StormData_fin_crop_a <- StormData_fin_crop[1:10,]
+
+e <- ggplot(StormData_fin_prop_a, aes(EVTYPE, sum_TOTPROP))
+f <- e + geom_bar(stat="identity", aes(fill = EVTYPE)) +
+xlab("Event Type") + ylab("Sum of Property Damage") +
+ggtitle("Property Damage by Event Type")
+g <- ggplot(StormData_fin_crop_a, aes(EVTYPE, sum_TOTCROP))
+h <- g + geom_bar(stat="identity", aes(fill = EVTYPE)) +
+xlab("Event Type") + ylab("Sum of Crop Damage") +
+ggtitle("Crop Damage by Event Type")
+grid.arrange(f, h)
+```
+
+From the above it can be seen the financially damaging effect of flooding on both property and crop damage. River flooding and ice storms have a greater impact on crop as one may have hypothesized.  
+
+##Results  
+The following are apparent from the data as analyzed:  
+1. **Tornados** are the events associated with the greatest number of fatalities and injuries.   
+2. **Excessive heat** is another important cause of death.  
+3. **Flooding** is the dominant cause of financial damage.  
+4. Crop damage is also impacted greatly **ice storms and river flooding**.  
